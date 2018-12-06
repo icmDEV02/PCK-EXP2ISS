@@ -7,7 +7,7 @@ Global conISS As ADODB.Connection
 Global rsISS As ADODB.Recordset
 Global rsERP As ADODB.Recordset
 Global rsERP1 As ADODB.Recordset
-Global strERPPath, strERP1Path As String
+Global strERPPath, strERP1Path, Mgrcode As String
 Global strEmailTo, strEmailSubject As String
 Global strISSServer, strISSUser, strISSPWD, strISSDBS As String
 Global strSQL, strERPPWD, strWorkingDir As String
@@ -35,11 +35,11 @@ Sub Main()
     strISSPWD = "tkmtcennoci2@!!"
 '    'strISSDBS = "ISSMASTER"
 '    strERPPWD = ""
-    
+'
 '    strISSServer = "NB-H2o\SQLEXPRESS"
 '    strISSUser = "iss_admin"
 '    strISSPWD = "12345678"
-    
+'
     'ISS Database Connection
     strISSConnectionString = "Driver={SQL Server};Server=" + strISSServer + ";Database=" + strISSDBS + ";Uid=" + strISSUser + ";Pwd=" + strISSPWD + ";"
     Set conISS = New ADODB.Connection
@@ -79,10 +79,11 @@ Sub Main()
     Call CustomerPricing
     Call Daily_SalesSummaries
 '    Call GroupPricing
-    Call SalesAnalysis
+'    Call SalesAnalysis
     Call SalesHistory
     Call SalesSummaries
     Call SingleMaster
+    Call SalesAnalysis
     
     retval = SendMail(Trim$(strEmailTo), _
                                         Trim$(strEmailSubject), _
@@ -129,6 +130,9 @@ Dim strLine As String
               strEmailSubject = Mid$(strLine, 14, Len(Trim(strLine)) - 13)
            End If
            
+            If Mid$(strLine, 1, 8) = "Mgrcode=" Then
+              Mgrcode = Mid$(strLine, 9, Len(Trim(strLine)) - 8)
+            End If
     Loop
     Close #1
         
@@ -233,7 +237,7 @@ Public Sub ARReport()
                                                             + " AND ARTRN.remamt = 0 " _
                                                             + " AND BKTRN.chqdat > DATE() " _
                                                             + " UNION " _
-                                                            + " SELECT DISTINCT '30'AS Company, ARTRN.slmcod AS SalesmanCode, 'PCK'+ARTRN.cuscod AS CustomerCode, " _
+                                                            + " SELECT DISTINCT '30'AS Company, ARTRN.slmcod AS SalesmanCode, 'WAT'+ARTRN.cuscod AS CustomerCode, " _
                                                             + " ARTRN.docnum AS BillNo, DTOS(ARTRN.docdat) AS BillDate, ARRCPIT.rcpnum AS TaxInvNo, " _
                                                             + " DTOS(ARTRN.duedat) AS DueDate_Txt, " _
                                                             + " ARTRN.remamt AS BalanceAmount, 'Not Due' AS BillStatus, BKTRN.chqnum AS PostDateCheque, " _
@@ -295,6 +299,17 @@ UpdateStatus:
     conISS.Execute "UPDATE ARReport SET BillStatus = 'Due' " _
                                         + " WHERE CONVERT(INTEGER,DueDate,0) = CONVERT(VARCHAR,GETDATE(),112) " _
                                         + " AND Company = '30'"
+    
+     Write_Log (": ARReport Copy (Slmcode+.) for MgrCode. . .")
+    
+    strSQL = "         INSERT INTO ARReport"
+    strSQL = strSQL & " SELECT Company,SalesmanCode+'.',CustomerCode,BillNo,BillDate,"
+    strSQL = strSQL & "         TaxInvNo,DueDate,BalanceAmount,BillStatus,PostDateCheque,"
+    strSQL = strSQL & "         PostDateChequeDate , PostDateChequeAmount, CurrencyCode"
+    strSQL = strSQL & "   From ARReport"
+    strSQL = strSQL & "   Where Company ='30'"
+    strSQL = strSQL & "   and SalesmanCode <> '" & Mgrcode & "'"
+    conISS.Execute strSQL
     
     Write_Log (": ARReport Finished. . .")
     
@@ -363,6 +378,7 @@ End Sub
 Public Sub Customer()
 
     Write_Log (": Customer Start. . .")
+    Dim a1 As String
     
     
     'Clear Table before Insert new records
@@ -376,18 +392,21 @@ Public Sub Customer()
     Set mCmd = New ADODB.Command
     mCmd.ActiveConnection = conERP
     
-    mCmd.CommandText = "SELECT '30', 'PCK'+TRIM(cuscod), 'PCK'+TRIM(cuscod), prenam+' '+cusnam, TRIM(addr01)+ ' ' +TRIM(addr02)+' '+TRIM(addr03), areacod, contact, " _
-                                                                        + " telnum, taxid, crline, balance, crline-balance, 0, '', 0, paycond, paytrm, remark, custyp, '', '', tabpr, '', 'PCK', '', '30', 1, 7 " _
+    mCmd.CommandText = "SELECT '30', 'PCK'+TRIM(cuscod), 'PCK'+TRIM(cuscod), LTRIM(RTRIM(prenam))+' '+LTRIM(RTRIM(cusnam)), TRIM(addr01)+ ' ' +TRIM(addr02)+' '+TRIM(addr03), areacod, contact, " _
+                                                                        + " telnum, taxid, crline, balance, crline-balance, 0, '', 0, paycond, paytrm, remark, custyp, '', custyp, tabpr, '', 'PCK', '', '30', 1, 7 " _
                                                                         + " From " + strERPPath + "\ARMAS " _
-                                                                        + " WHERE slmcod <> ' ' " _
-                                                                        + " AND cuscod <> ' ª√‘ßø‘≈¥' " _
+                                                                        + " WHERE cuscod <> ' ª√‘ßø‘≈¥' " _
                                                                         + " UNION " _
-                                                                        + " SELECT '30', 'PCK'+TRIM(cuscod), 'PCK'+TRIM(cuscod), prenam+' '+cusnam, TRIM(addr01)+ ' ' +TRIM(addr02)+' '+TRIM(addr03), areacod, contact, " _
-                                                                        + " telnum, taxid, crline, balance, crline-balance, 0, '', 0, paycond, paytrm, remark, custyp, '', '', tabpr, '', 'PCK', '', '30', 1, 7 " _
+                                                                        + " SELECT '30', 'WAT'+TRIM(cuscod), 'WAT'+TRIM(cuscod), TRIM(prenam)+' '+TRIM(cusnam), TRIM(addr01)+ ' ' +TRIM(addr02)+' '+TRIM(addr03), areacod, contact, " _
+                                                                        + " telnum, taxid, crline, balance, crline-balance, 0, '', 0, paycond, paytrm, remark, custyp, '', custyp, tabpr, '', 'PCK', '', '30', 1, 7 " _
                                                                         + " From " + strERP1Path + "\ARMAS " _
-                                                                        + " WHERE slmcod <> ' ' " _
-                                                                        + " AND cuscod <> ' ª√‘ßø‘≈¥' " _
-                                                                        + " AND cuscod not in (SELECT cuscod From " + strERPPath + "\ARMAS )"
+                                                                        + " WHERE cuscod <> ' ª√‘ßø‘≈¥' " _
+                                                                        + " UNION " _
+                                                                        + " SELECT '30', 'PWA'+TRIM(cuscod), 'PWA'+TRIM(cuscod), TRIM(prenam)+' '+TRIM(cusnam), TRIM(addr01)+ ' ' +TRIM(addr02)+' '+TRIM(addr03), areacod, contact, " _
+                                                                        + " telnum, taxid, crline, balance, crline-balance, 0, '', 0, paycond, paytrm, remark, custyp, '', custyp, tabpr, '', 'PCK', '', '30', 1, 7 " _
+                                                                        + " From " + strERPPath + "\ARMAS " _
+                                                                        + " WHERE cuscod <> ' ª√‘ßø‘≈¥' " _
+                                                                        + " AND cuscod in (SELECT cuscod From " + strERP1Path + "\ARMAS )"
                                                                        
     mCmd.CommandType = adCmdText
     
@@ -403,6 +422,7 @@ Public Sub Customer()
             If (rsISS.Properties.Item(idx).Type = adInteger Or adNumeric) And rsERP.Fields(idx) = "" Then
                 rsISS.Fields(idx) = 0
             Else
+
                 rsISS.Fields(idx) = rsERP.Fields(idx)
             End If
 
@@ -423,11 +443,20 @@ Public Sub Customer()
     mCmd.ActiveConnection = conERP
 
     mCmd.CommandText = "SELECT '30'AS Company, 'PCK'+TRIM(ARSHIP.cuscod)+'-'+TRIM(ARSHIP.shipto) AS CustomerCode, 'PCK'+ARSHIP.cuscod AS ParentCustomerCode, " _
-                                                                        + " ARMAS.prenam+' '+ARMAS.cusnam AS CustomerName, " _
+                                                                        + " LTRIM(RTRIM(ARMAS.prenam))+' '+LTRIM(RTRIM(ARMAS.cusnam)) AS CustomerName, " _
                                                                         + " TRIM(ARSHIP.addr01)+' '+TRIM(ARSHIP.addr02)+' '+TRIM(ARSHIP.addr03) AS Address, ARMAS.areacod AS ProvinceCode, " _
                                                                         + " ARSHIP.contact AS ContactPerson, ARSHIP.telnum AS TelephoneNumber, " _
                                                                         + " ARMAS.taxid AS TaxNumber, 0, 0, 0, 0, '', 0, ARMAS.paycond, ARMAS.paytrm, ARMAS.remark, ARMAS.custyp, '', '', 0, '', 'PCK', '', '30', 1, 7 " _
-                                                                        + " From ARSHIP, ARMAS " _
+                                                                        + " From " + strERPPath + "\ARSHIP, " + strERPPath + "\ARMAS " _
+                                                                        + " WHERE ARSHIP.cuscod = ARMAS.cuscod " _
+                                                                        + " AND slmcod <> ' ' " _
+                                                                        + " UNION " _
+                                                                        + " SELECT '30'AS Company, 'WAT'+RTRIM(ARSHIP.cuscod)+'-'+TRIM(ARSHIP.shipto) AS CustomerCode, 'PCK'+ARSHIP.cuscod AS ParentCustomerCode, " _
+                                                                        + " LTRIM(RTRIM(ARMAS.prenam))+' '+LTRIM(RTRIM(ARMAS.cusnam)) AS CustomerName, " _
+                                                                        + " TRIM(ARSHIP.addr01)+' '+TRIM(ARSHIP.addr02)+' '+TRIM(ARSHIP.addr03) AS Address, ARMAS.areacod AS ProvinceCode, " _
+                                                                        + " ARSHIP.contact AS ContactPerson, ARSHIP.telnum AS TelephoneNumber, " _
+                                                                        + " ARMAS.taxid AS TaxNumber, 0, 0, 0, 0, '', 0, ARMAS.paycond, ARMAS.paytrm, ARMAS.remark, ARMAS.custyp, '', '', 0, '', 'PCK', '', '30', 1, 7 " _
+                                                                        + " From " + strERP1Path + "\ARSHIP, " + strERP1Path + "\ARMAS " _
                                                                         + " WHERE ARSHIP.cuscod = ARMAS.cuscod " _
                                                                         + " AND slmcod <> ' ' "
     mCmd.CommandType = adCmdText
@@ -487,11 +516,10 @@ Public Sub CustomerSalesman()
                                                     + " WHERE slmcod IS NOT NULL AND slmcod <> ' ' " _
                                                     + " AND cuscod <> ' ª√‘ßø‘≈¥' " _
                                                     + " UNION " _
-                                                    + " SELECT '30', 'PCK'+TRIM(cuscod), 'PCK'+TRIM(slmcod) " _
-                                                    + " From " + strERPPath + "\ARMAS " _
+                                                    + " SELECT '30', 'WAT'+TRIM(cuscod), 'PCK'+TRIM(slmcod) " _
+                                                    + " From " + strERP1Path + "\ARMAS " _
                                                     + " WHERE slmcod IS NOT NULL AND slmcod <> ' ' " _
-                                                    + " AND cuscod <> ' ª√‘ßø‘≈¥' " _
-                                                    + " AND cuscod not in (SELECT cuscod From " + strERPPath + "\ARMAS)"
+                                                    + " AND cuscod <> ' ª√‘ßø‘≈¥' "
 
 
     mCmd.CommandType = adCmdText
@@ -553,86 +581,99 @@ Public Sub CustomerSalesman()
     End If
     
     'For Manager - Bill To
-    mCmd.CommandText = "SELECT DISTINCT '30', 'PCK'+TRIM(ARMAS.cuscod), TRIM(positn) " _
-                                                    + " From ARMAS, OESLM " _
-                                                    + " WHERE ARMAS.slmcod = OESLM.slmcod " _
-                                                    + " AND OESLM.positn IS NOT NULL " _
-                                                    + " AND OESLM.positn <> ' ' "
-                                                        
-    mCmd.CommandType = adCmdText
-    
-    Set rsERP = mCmd.Execute
-    
-    If rsERP.EOF Then
-        Write_Log (": No row found for SalesmanCustomer Manager-Bill To ")
-        
-        rsERP.Close
-    
-        Write_Log (": SalesmanCustomer Manager-Bill To Finished. . .")
-    Else
-        rsERP.MoveFirst
-        
-        Do While Not rsERP.EOF
-            rsISS.AddNew
-            
-            For idx = 0 To 2
-                If idx = 2 Then
-                    rsISS.Fields(idx) = "PCK" & Trim(rsERP.Fields(idx))
-                Else
-                    rsISS.Fields(idx) = rsERP.Fields(idx)
-                End If
-            Next idx
-            
-            rsISS.Update
-            rsERP.MoveNext
-                
-        Loop
-        
-        rsERP.Close
-    End If
-    
-    'For Manager - Ship To
-    mCmd.CommandText = "SELECT DISTINCT '30', 'PCK'+TRIM(ARSHIP.cuscod)+'-'+TRIM(ARSHIP.shipto), TRIM(positn) " _
-                                                    + " From ARMAS, OESLM, ARSHIP " _
-                                                    + " WHERE ARMAS.slmcod = OESLM.slmcod " _
-                                                    + " AND OESLM.positn IS NOT NULL " _
-                                                    + " AND OESLM.positn <> ' ' " _
-                                                    + " AND ARMAS.cuscod = ARSHIP.cuscod "
-                                                        
-    mCmd.CommandType = adCmdText
-    
-    Set rsERP = mCmd.Execute
-    If rsERP.EOF Then
-        Write_Log (": No row found for SalesmanCustomer Manager-Ship To ")
-        
-        rsISS.Close
-        rsERP.Close
-    
-        Write_Log (": SalesmanCustomer Manager-Ship To Finished. . .")
-    Else
-        rsERP.MoveFirst
-        
-        Do While Not rsERP.EOF
-            rsISS.AddNew
-            
-            For idx = 0 To 2
-                If idx = 2 Then
-                    rsISS.Fields(idx) = "PCK" & Trim(rsERP.Fields(idx))
-                Else
-                    rsISS.Fields(idx) = rsERP.Fields(idx)
-                End If
-            Next idx
-            
-            rsISS.Update
-            rsERP.MoveNext
-                
-        Loop
-        
-        rsERP.Close
-        rsISS.Close
-    End If
+'    mCmd.CommandText = "SELECT DISTINCT '30', 'PCK'+TRIM(ARMAS.cuscod), TRIM(positn) " _
+'                                                    + " From ARMAS, OESLM " _
+'                                                    + " WHERE ARMAS.slmcod = OESLM.slmcod " _
+'                                                    + " AND OESLM.positn IS NOT NULL " _
+'                                                    + " AND OESLM.positn <> ' ' "
+'
+'    mCmd.CommandType = adCmdText
+'
+'    Set rsERP = mCmd.Execute
+'
+'    If rsERP.EOF Then
+'        Write_Log (": No row found for SalesmanCustomer Manager-Bill To ")
+'
+'        rsERP.Close
+'
+'        Write_Log (": SalesmanCustomer Manager-Bill To Finished. . .")
+'    Else
+'        rsERP.MoveFirst
+'
+'        Do While Not rsERP.EOF
+'            rsISS.AddNew
+'
+'            For idx = 0 To 2
+'                If idx = 2 Then
+'                    rsISS.Fields(idx) = "PCK" & Trim(rsERP.Fields(idx))
+'                Else
+'                    rsISS.Fields(idx) = rsERP.Fields(idx)
+'                End If
+'            Next idx
+'
+'            rsISS.Update
+'            rsERP.MoveNext
+'
+'        Loop
+'
+'        rsERP.Close
+'    End If
+'
+'    For Manager - Ship To
+'    mCmd.CommandText = "SELECT DISTINCT '30', 'PCK'+TRIM(ARSHIP.cuscod)+'-'+TRIM(ARSHIP.shipto), TRIM(positn) " _
+'                                                    + " From ARMAS, OESLM, ARSHIP " _
+'                                                    + " WHERE ARMAS.slmcod = OESLM.slmcod " _
+'                                                    + " AND OESLM.positn IS NOT NULL " _
+'                                                    + " AND OESLM.positn <> ' ' " _
+'                                                    + " AND ARMAS.cuscod = ARSHIP.cuscod "
+'
+'    mCmd.CommandType = adCmdText
+'
+'    Set rsERP = mCmd.Execute
+'    If rsERP.EOF Then
+'        Write_Log (": No row found for SalesmanCustomer Manager-Ship To ")
+'
+'        rsISS.Close
+'        rsERP.Close
+'
+'        Write_Log (": SalesmanCustomer Manager-Ship To Finished. . .")
+'    Else
+'        rsERP.MoveFirst
+'
+'        Do While Not rsERP.EOF
+'            rsISS.AddNew
+'
+'            For idx = 0 To 2
+'                If idx = 2 Then
+'                    rsISS.Fields(idx) = "PCK" & Trim(rsERP.Fields(idx))
+'                Else
+'                    rsISS.Fields(idx) = rsERP.Fields(idx)
+'                End If
+'            Next idx
+'
+'            rsISS.Update
+'            rsERP.MoveNext
+'
+'        Loop
+'
+'        rsERP.Close
+'        rsISS.Close
+'    End If
     
     conISS.Execute "UPDATE CustomerSaleman SET SalesmanCode = RTRIM(SalesmanCode) "
+    
+    
+    'for manager
+    strSQL = "    INSERT INTO CustomerSaleman"
+    strSQL = strSQL & " SELECT DISTINCT Company , CustomerCode ,'" & Mgrcode & "'"
+    strSQL = strSQL & " From CustomerSaleman"
+    strSQL = strSQL & " Where Company ='30'"
+    strSQL = strSQL & " and SalesmanCode <> '" & Mgrcode & "'"
+    strSQL = strSQL & " and CustomerCode NOT IN (Select customercode From CustomerSaleman"
+    strSQL = strSQL & "                          Where Company ='30'"
+    strSQL = strSQL & "                          and SalesmanCode = '" & Mgrcode & "')"
+
+    conISS.Execute strSQL
                                           
     Write_Log (": CustomerSaleman Finished. . .")
     
@@ -813,11 +854,11 @@ Public Sub CustomerPricing()
     
                         
     'Clear Table before Insert new records
-    conISS.Execute "DELETE FROM Tmp_CustomerPricing WHERE Company = '30'"
+'    conISS.Execute "DELETE FROM Tmp_CustomerPricing WHERE Company = '30'"
     conISS.Execute "DELETE FROM CustomerPricing WHERE Company = '30' "
     
     Set rsISS = New ADODB.Recordset
-    strSQL = "SELECT * FROM Tmp_CustomerPricing"
+    strSQL = "SELECT * FROM CustomerPricing"
     rsISS.Open strSQL, conISS, adOpenDynamic, adLockOptimistic
 
 
@@ -826,7 +867,7 @@ Public Sub CustomerPricing()
     mCmd.ActiveConnection = conERP
     
    
-    
+  'THB
     strSQL = "SELECT DISTINCT '30','PCK'+people, 'PCK'+RTRIM(stkcod), max(unitpr), 0, 0, 0, 'THB' " _
                         + "  FROM " + strERPPath + "\STCRD " _
                         + "  WHERE slmcod <> ' '" _
@@ -834,7 +875,47 @@ Public Sub CustomerPricing()
                         + "  And rdocnum in (SELECT MAX(rdocnum)From STCRD WHERE slmcod <> ' ' And SUBSTR(docnum, 1, 2) IN ('IB', 'IS') Group by people, stkcod)" _
                         + "  Group by people, stkcod" _
                         + "  UNION " _
-                        + " SELECT DISTINCT '30','PCK'+people, 'WAT'+RTRIM(stkcod), max(unitpr), 0, 0, 0, 'THB' " _
+                        + " SELECT DISTINCT '30','WAT'+people, 'WAT'+RTRIM(stkcod), max(unitpr), 0, 0, 0, 'THB' " _
+                        + "  FROM " + strERP1Path + "\STCRD " _
+                        + "  WHERE slmcod <> ' '" _
+                        + "  And SUBSTR(docnum, 1, 2) IN ('IV')" _
+                        + "  And rdocnum in (SELECT MAX(rdocnum)From STCRD WHERE slmcod <> ' ' And SUBSTR(docnum, 1, 2) IN ('IB', 'IS') Group by people, stkcod)" _
+                        + "  Group by people, stkcod"
+                        
+    mCmd.CommandText = strSQL
+                                                    
+    mCmd.CommandType = adCmdText
+    
+    Set rsERP = mCmd.Execute
+    rsERP.MoveFirst
+    
+    Do While Not rsERP.EOF
+        rsISS.AddNew
+        
+        For idx = 0 To 7
+            rsISS.Fields(idx) = rsERP.Fields(idx)
+
+        Next idx
+    
+         
+        rsISS.Update
+        rsERP.MoveNext
+        
+        
+            
+    Loop
+    
+    rsERP.Close
+    
+    'USD
+    strSQL = "SELECT DISTINCT '30','PCK'+people, 'PCK'+RTRIM(stkcod), max(unitpr), 0, 0, 0, 'USD' " _
+                        + "  FROM " + strERPPath + "\STCRD " _
+                        + "  WHERE slmcod <> ' '" _
+                        + "  And SUBSTR(docnum, 1, 2) IN ('IB', 'IS')" _
+                        + "  And rdocnum in (SELECT MAX(rdocnum)From STCRD WHERE slmcod <> ' ' And SUBSTR(docnum, 1, 2) IN ('IB', 'IS') Group by people, stkcod)" _
+                        + "  Group by people, stkcod" _
+                        + "  UNION " _
+                        + " SELECT DISTINCT '30','WAT'+people, 'WAT'+RTRIM(stkcod), max(unitpr), 0, 0, 0, 'USD' " _
                         + "  FROM " + strERP1Path + "\STCRD " _
                         + "  WHERE slmcod <> ' '" _
                         + "  And SUBSTR(docnum, 1, 2) IN ('IV')" _
@@ -869,7 +950,7 @@ Public Sub CustomerPricing()
       Write_Log (": Tmp_CustomerPricing Finished. . .")
        Write_Log (": CustomerPricing Start. . .")
 
-    conISS.Execute " INSERT INTO CustomerPricing SELECT * FROM Tmp_CustomerPricing WHERE Company = '30'"
+'    conISS.Execute " INSERT INTO CustomerPricing SELECT * FROM Tmp_CustomerPricing WHERE Company = '30'"
     
 
     Write_Log (": GroupPricing Finished. . .")
@@ -891,7 +972,7 @@ Public Sub Daily_SalesSummaries()
                                         
     conISS.Execute "DELETE FROM Tmp_Report_Daily_SalesSummaries " _
                                         + " WHERE Company = '30'"
-    
+    'pck
     Set rsISS = New ADODB.Recordset
     strSQL = "SELECT * FROM Tmp_Report_Daily_SalesSummaries "
     rsISS.Open strSQL, conISS, adOpenDynamic, adLockOptimistic
@@ -904,17 +985,75 @@ Public Sub Daily_SalesSummaries()
       mCmd.CommandText = "SELECT '30', slmcod, 'PCK'+people, 'PCK'+RTRIM(stkcod), DTOS(docdat), 'NOR',  " _
                                                         + " SUM(trnqty), SUM(netval), 'THB'  " _
                                                         + " FROM " + strERPPath + "\STCRD " _
-                                                        + " WHERE slmcod <> ' ' " _
-                                                        + " AND SUBSTR(docnum, 1, 2) IN ('IB', 'IS') " _
+                                                        + " WHERE SUBSTR(docnum, 1, 2) IN ('IB', 'IS') " _
                                                         + " AND pstkcod = ' ' " _
                                                         + " GROUP BY slmcod, people, stkcod, docdat " _
                                                         + " UNION " _
-                                                        + " SELECT '30', slmcod, 'PCK'+people, 'WAT'+RTRIM(stkcod), DTOS(docdat), 'NOR',  " _
+                                                        + " SELECT '30', slmcod, 'WAT'+people, 'WAT'+RTRIM(stkcod), DTOS(docdat), 'NOR',  " _
+                                                        + " SUM(trnqty), SUM(netval)*-1, 'THB'  " _
+                                                        + " FROM " + strERPPath + "\STCRD " _
+                                                        + " WHERE pstkcod = ' ' " _
+                                                        + " AND SUBSTR(docnum, 1, 2) IN ('SR') " _
+                                                        + " GROUP BY slmcod, people, stkcod, docdat "
+                                                        
+    mCmd.CommandType = adCmdText
+'
+'    + " AND YEAR(docdat) = " + Str(intCurrYear) _
+'                                                        + " AND MONTH(docdat) = " + Str(intCurrMonth) _
+
+    Set rsERP = mCmd.Execute
+    If rsERP.EOF Then
+        Write_Log (": No row found for Period: " + Str(intCurrYear) + Format(intCurrMonth, "00"))
+        
+        rsISS.Close
+        rsERP.Close
+    
+        Write_Log (": Daily_SalesSummaries Finished. . .")
+        Exit Sub
+    End If
+    
+    rsERP.MoveFirst
+    
+    Do While Not rsERP.EOF
+        rsISS.AddNew
+        
+        For idx = 0 To 8
+            If idx = 1 Then
+                rsISS.Fields(idx) = "PCK" & Trim(rsERP.Fields(idx))
+            Else
+                rsISS.Fields(idx) = rsERP.Fields(idx)
+            End If
+        Next idx
+        
+        rsISS.Update
+        rsERP.MoveNext
+            
+    Loop
+        
+    rsISS.Close
+    
+        'WAT
+    Set rsISS = New ADODB.Recordset
+    strSQL = "SELECT * FROM Tmp_Report_Daily_SalesSummaries "
+    rsISS.Open strSQL, conISS, adOpenDynamic, adLockOptimistic
+
+
+    Set rsERP = New ADODB.Recordset
+    Set mCmd = New ADODB.Command
+    mCmd.ActiveConnection = conERP
+                                                        
+      mCmd.CommandText = "SELECT '30', slmcod, 'WAT'+people, 'WAT'+RTRIM(stkcod), DTOS(docdat), 'NOR',  " _
                                                         + " SUM(trnqty), SUM(netval), 'THB'  " _
                                                         + " FROM " + strERP1Path + "\STCRD " _
-                                                        + " WHERE slmcod <> ' ' " _
+                                                        + " WHERE SUBSTR(docnum, 1, 2) IN ('IV') " _
                                                         + " AND pstkcod = ' ' " _
-                                                        + " AND SUBSTR(docnum, 1, 2) IN ('IV') " _
+                                                        + " GROUP BY slmcod, people, stkcod, docdat " _
+                                                        + " UNION " _
+                                                        + " SELECT '30', slmcod, 'WAT'+people, 'WAT'+RTRIM(stkcod), DTOS(docdat), 'NOR',  " _
+                                                        + " SUM(trnqty)*-1, +SUM(netval)*-1, 'THB'  " _
+                                                        + " FROM " + strERP1Path + "\STCRD " _
+                                                        + " WHERE pstkcod = ' ' " _
+                                                        + " AND SUBSTR(docnum, 1, 2) IN ('SR') " _
                                                         + " GROUP BY slmcod, people, stkcod, docdat "
                                                         
     mCmd.CommandType = adCmdText
@@ -954,14 +1093,37 @@ Public Sub Daily_SalesSummaries()
     rsISS.Close
     rsERP.Close
     
-    conISS.Execute "INSERT INTO Report_Daily_SalesSummaries " _
+    Set rsERP = mCmd.Execute
+    rsERP.MoveFirst
+    
+    strSQL = "   UPDATE Tmp_Report_Daily_SalesSummaries "
+    strSQL = strSQL & " set Tmp_Report_Daily_SalesSummaries.SalesmanCode = CS.SalesmanCode "
+    strSQL = strSQL & " from Tmp_Report_Daily_SalesSummaries DS inner join CustomerSaleman CS on DS.CustomerCode = CS.CustomerCode"
+    strSQL = strSQL & " WHERE DS.Company = '30'"
+    strSQL = strSQL & " AND CS.Company = '30'"
+    conISS.Execute strSQL
+
+       rsERP.Close
+    Set rsERP = Nothing
+    
+    conISS.Execute " INSERT INTO Report_Daily_SalesSummaries " _
                                     + " SELECT Company, RTRIM(SalesmanCode), CustomerCode, ProductCode, BillDate, RowType, " _
                                     + " SUM(SalesQuantity), SUM(SalesAmount), CurrencyCode " _
                                     + " FROM Tmp_Report_Daily_SalesSummaries " _
-                                    + " WHERE Company = '30'" _
+                                    + " WHERE Company = '30' " _
                                     + " GROUP BY Company, SalesmanCode, CustomerCode, ProductCode, BillDate, RowType, CurrencyCode "
                                     
     'conISS.Execute "UPDATE Report_Daily_SalesSummaries SET SalesmanCode = RTRIM(SalesmanCode) "
+    
+    conISS.Execute " INSERT INTO Report_Daily_SalesSummaries " _
+                                    + " SELECT Company, SalesmanCode+'.' , CustomerCode, ProductCode, " _
+                                    + " BillDate , RowType, SalesQuantity, SalesAmount, CurrencyCode" _
+                                    + " From Report_Daily_SalesSummaries" _
+                                    + " Where Company ='30' " _
+                                    + " And SalesmanCode <> '" & Mgrcode & "'"
+    conISS.Execute strSQL
+    
+    Write_Log (": Daily_SalesSummaries15mth Insert (slmcode+.) for manager. . .")
     
     Write_Log (": Daily_SalesSummaries Finished. . .")
     
@@ -1023,8 +1185,25 @@ Public Sub SalesAnalysis()
 
     Write_Log (": SalesAnalysis Start. . .")
 
+        Dim intFromMonth, intToMonth As Integer
+        Dim strstartdate, strDate As String
+        
+        intLastYear = Year(Date)
+    strstartdate = Format(intLastYear, "&&&&") + "0101"
+    
   'Clear Table before Insert new records
     conISS.Execute "DELETE FROM Tmp_SalesAnalysis WHERE Company = '30'"
+    conISS.Execute "DELETE FROM ProductTraget WHERE Company = '30' "
+    
+    ' Create Year to date on ProductTraget
+    strSQL = "INSERT INTO ProductTraget " _
+                                    + " SELECT DISTINCT Company, SalesmanCode, ProductCode, RowType, " _
+                                    + " year(getdate()), month(getdate()), SUM(SalesAmount), SUM(SalesQuantity), CurrencyCode " _
+                                    + " FROM Report_Daily_SalesSummaries " _
+                                    + " WHERE Company = '30' " _
+                                    + " AND BillDate >= '" + strstartdate + "' " _
+                                    + " GROUP BY Company, SalesmanCode, ProductCode, RowType, CurrencyCode"
+    conISS.Execute strSQL, intNoOfRow
 
 ' Create Sales Transaction for Current Month
 strSQL = "INSERT INTO Tmp_SalesAnalysis " _
@@ -1050,13 +1229,11 @@ conISS.Execute "INSERT INTO Tmp_SalesAnalysis " _
 
 'Create Sales Transaction for the Same Month Last Year
 conISS.Execute "INSERT INTO Tmp_SalesAnalysis " _
-                                + " SELECT Company, SalesmanCode, CustomerCode, ProductCode, RowType, " _
-                                                    + " 0, 0, 0, 0, SUM(SalesAmount), 'THB' " _
-                                + " FROM Report_Daily_SalesSummaries " _
+                                + " SELECT Company, SalesmanCode, CustomerCode, ProductCode, 'NOR', " _
+                                                    + " 0, 0, 0, 0, SUM(LeftAmount), 'THB' " _
+                                + " FROM OrderStatusReportItem " _
                                 + " WHERE Company = '30'" _
-                                + " AND SUBSTRING(BillDate, 1, 4) = '" + Format(intCurrYear - 1, "0000") + "' " _
-                                + " AND SUBSTRING(BillDate, 5, 2) = '" + Format(intCurrMonth, "00") + "' " _
-                                + " GROUP BY Company, SalesmanCode, CustomerCode, ProductCode, RowType "
+                                + " GROUP BY Company, SalesmanCode, CustomerCode, ProductCode"
 
   'Clear Table before Insert new records
   conISS.Execute "DELETE FROM Report_SalesAnalysis WHERE Company = '30'"
@@ -1074,10 +1251,10 @@ conISS.Execute "INSERT INTO Report_SalesAnalysis" _
 End Sub
 
 Public Sub SalesHistory()
-    Dim dteDate As Date
+     Dim dteDate As Date
     Dim strSalesmanCode, strCustomerCode, strProductCode As String
     Dim dteDocDate As Date
-    Dim strStartDate, strDate As String
+    Dim strstartdate, strDate As String
 
     Write_Log (": SalesHistory Start. . .")
     
@@ -1086,7 +1263,7 @@ Public Sub SalesHistory()
     
     dteDate = DateAdd("m", -12, Date)
     dteDate = DateAdd("yyyy", -543, dteDate)
-    strStartDate = Format(dteDate, "YYYYMMDD")
+    strstartdate = Format(dteDate, "YYYYMMDD")
     
     ' Find the Last Sales Record
     conISS.Execute "INSERT INTO Tmp_SalesHistoryMax " _
@@ -1094,7 +1271,7 @@ Public Sub SalesHistory()
                                                             + " MAX(BillDate), 0, 0, CurrencyCode " _
                                     + " FROM Report_Daily_SalesSummaries " _
                                     + " WHERE Company = '30'" _
-                                    + " AND BillDate >= '" + strStartDate + "' " _
+                                    + " AND BillDate >= '" + strstartdate + "' " _
                                     + " GROUP BY Company, SalesmanCode, CustomerCode, ProductCode,RowType, CurrencyCode "
     
     conISS.Execute "DELETE FROM Tmp_SalesHistory WHERE Company = '30'"
@@ -1118,7 +1295,7 @@ Public Sub SalesHistory()
                                                             + " SUM(SalesAmount), SUM(SalesQuantity), CurrencyCode " _
                                     + " FROM Report_Daily_SalesSummaries " _
                                     + " WHERE Company = '30'" _
-                                    + " AND BillDate >= '" + strStartDate + "' " _
+                                    + " AND BillDate >= '" + strstartdate + "' " _
                                     + " GROUP BY Company, SalesmanCode, CustomerCode, ProductCode, CurrencyCode "
 
                                             
@@ -1195,43 +1372,43 @@ Public Sub SingleMaster()
     
     'Transportation Method (Lookup)
     
-    Write_Log (": Transportation Method-Lookup Start. . .")
-    conISS.Execute "DELETE FROM Lookup WHERE Company = '30'"
-    
-    Set rsISS = New ADODB.Recordset
-    strSQL = "SELECT * FROM Lookup "
-    rsISS.Open strSQL, conISS, adOpenDynamic, adLockOptimistic
-
-
-    Set rsERP = New ADODB.Recordset
-    Set mCmd = New ADODB.Command
-    mCmd.ActiveConnection = conERP
-    
-    mCmd.CommandText = "SELECT '30', 'ModeDly', typcod, typdes, 1 " _
-                                                        + " FROM ISTAB " _
-                                                        + " WHERE tabtyp = '41' "
-                                                    
-    mCmd.CommandType = adCmdText
-    
-    Set rsERP = mCmd.Execute
-    rsERP.MoveFirst
-    
-    Do While Not rsERP.EOF
-        rsISS.AddNew
-        
-        For idx = 0 To 4
-            rsISS.Fields(idx) = rsERP.Fields(idx)
-        Next idx
-        
-        rsISS.Update
-        rsERP.MoveNext
-            
-    Loop
-    
-    rsERP.Close
-    rsISS.Close
-    
-    Write_Log (": Transportation Method-Lookup Finished. . .")
+'    Write_Log (": Transportation Method-Lookup Start. . .")
+'    conISS.Execute "DELETE FROM Lookup WHERE Company = '30'"
+'
+'    Set rsISS = New ADODB.Recordset
+'    strSQL = "SELECT * FROM Lookup "
+'    rsISS.Open strSQL, conISS, adOpenDynamic, adLockOptimistic
+'
+'
+'    Set rsERP = New ADODB.Recordset
+'    Set mCmd = New ADODB.Command
+'    mCmd.ActiveConnection = conERP
+'
+'    mCmd.CommandText = "SELECT '30', 'ModeDly', typcod, typdes, 1 " _
+'                                                        + " FROM ISTAB " _
+'                                                        + " WHERE tabtyp = '41' "
+'
+'    mCmd.CommandType = adCmdText
+'
+'    Set rsERP = mCmd.Execute
+'    rsERP.MoveFirst
+'
+'    Do While Not rsERP.EOF
+'        rsISS.AddNew
+'
+'        For idx = 0 To 4
+'            rsISS.Fields(idx) = rsERP.Fields(idx)
+'        Next idx
+'
+'        rsISS.Update
+'        rsERP.MoveNext
+'
+'    Loop
+'
+'    rsERP.Close
+'    rsISS.Close
+'
+'    Write_Log (": Transportation Method-Lookup Finished. . .")
     
     'Customer Group
     
@@ -1248,8 +1425,15 @@ Public Sub SingleMaster()
     mCmd.ActiveConnection = conERP
     
     mCmd.CommandText = "SELECT DISTINCT '30', typcod, typdes, 1 " _
-                                                        + " FROM ARMAS, ISTAB " _
-                                                        + " WHERE ISTAB.tabtyp = '45' "
+                                                        + " FROM " + strERPPath + "\ARMAS, " + strERPPath + "\ISTAB " _
+                                                        + " WHERE ISTAB.tabtyp = '45' " _
+                                                        + " UNION " _
+                                                        + " SELECT DISTINCT '30', typcod, typdes, 1 " _
+                                                        + " FROM " + strERP1Path + "\ARMAS, " + strERP1Path + "\ISTAB " _
+                                                        + " WHERE ISTAB.tabtyp = '45' " _
+                                                        + " AND typcod not in (SELECT typcod " _
+                                                        + " FROM " + strERPPath + "\ARMAS, " + strERPPath + "\ISTAB " _
+                                                        + " WHERE ISTAB.tabtyp = '45' ) "
                                                     
     mCmd.CommandType = adCmdText
     
@@ -1288,9 +1472,15 @@ Public Sub SingleMaster()
     mCmd.ActiveConnection = conERP
 
     mCmd.CommandText = "SELECT DISTINCT '30', typcod, typdes, 0, 1 " _
-                                                        + " FROM ISTAB " _
+                                                        + " FROM " + strERPPath + "\ISTAB " _
                                                         + " WHERE tabtyp = '22' " _
-                                                        + " AND SUBSTR(typcod,1,1) BETWEEN 'A' AND 'Z' "
+                                                        + " UNION " _
+                                                        + " SELECT DISTINCT '30', typcod, typdes, 0, 1 " _
+                                                        + " FROM " + strERP1Path + "\ISTAB " _
+                                                        + " WHERE tabtyp = '22' " _
+                                                        + " AND typcod not in (SELECT typcod " _
+                                                        + " FROM " + strERPPath + "\ISTAB " _
+                                                        + " WHERE tabtyp = '22' )"
     mCmd.CommandType = adCmdText
 
    Set rsERP = mCmd.Execute
@@ -1332,9 +1522,15 @@ Public Sub SingleMaster()
     mCmd.ActiveConnection = conERP
 
     mCmd.CommandText = "SELECT DISTINCT '30', shortnam2, 'F', 1 " _
-                                                        + " FROM ISTAB " _
+                                                        + " FROM " + strERPPath + "\ISTAB " _
                                                         + " WHERE tabtyp = '22' " _
-                                                        + " AND SUBSTR(typcod,1,1) BETWEEN 'A' AND 'Z' "
+                                                        + " UNION " _
+                                                        + " SELECT DISTINCT '30', shortnam2, 'F', 1 " _
+                                                        + " FROM " + strERP1Path + "\ISTAB " _
+                                                        + " WHERE tabtyp = '22' " _
+                                                        + " AND shortnam2 not in (SELECT shortnam2 " _
+                                                        + " FROM " + strERPPath + "\ISTAB " _
+                                                        + " WHERE tabtyp = '22') "
     mCmd.CommandType = adCmdText
 
     Set rsERP = mCmd.Execute
@@ -1366,40 +1562,48 @@ Public Sub SingleMaster()
 
     conISS.Execute "DELETE FROM ProductLine WHERE Company = '30'"
 
-    Set rsISS = New ADODB.Recordset
-    strSQL = "SELECT * FROM ProductLine "
-    rsISS.Open strSQL, conISS, adOpenDynamic, adLockOptimistic
-
-    Set rsERP = New ADODB.Recordset
-    Set mCmd = New ADODB.Command
-    mCmd.ActiveConnection = conERP
-
-    mCmd.CommandText = "SELECT DISTINCT '30', shortnam2, 'F', 1 " _
-                                                        + " FROM ISTAB " _
-                                                        + " WHERE tabtyp = '22' " _
-                                                        + " AND SUBSTR(typcod,1,1) BETWEEN 'A' AND 'Z' "
-    mCmd.CommandType = adCmdText
-
-    Set rsERP = mCmd.Execute
+'    Set rsISS = New ADODB.Recordset
+'    strSQL = "SELECT * FROM ProductLine "
+'    rsISS.Open strSQL, conISS, adOpenDynamic, adLockOptimistic
+'
+'    Set rsERP = New ADODB.Recordset
+'    Set mCmd = New ADODB.Command
+'    mCmd.ActiveConnection = conERP
+'
+'    mCmd.CommandText = "SELECT DISTINCT '30', shortnam2, 'F', 1 " _
+'                                                        + " FROM ISTAB " _
+'                                                        + " WHERE tabtyp = '22' " _
+'                                                        + " UNION " _
+'                                                        + " SELECT DISTINCT '30', shortnam2, 'F', 1 " _
+'                                                        + " FROM " + strERP1Path + "\ISTAB " _
+'                                                        + " WHERE tabtyp = '22' " _
+'                                                        + " AND shortnam2 not in (SELECT shortnam2 " _
+'                                                        + " FROM " + strERPPath + "\ISTAB " _
+'                                                        + " WHERE tabtyp = '22')"
+'    mCmd.CommandType = adCmdText
+'
+'    Set rsERP = mCmd.Execute
+'
+'        If Not rsERP.EOF Then
+'        rsERP.MoveFirst
+'    End If
+'
+'    Do While Not rsERP.EOF
+'        rsISS.AddNew
+'
+'        For idx = 0 To 3
+'            rsISS.Fields(idx) = rsERP.Fields(idx)
+'        Next idx
+'
+'        rsISS.Update
+'        rsERP.MoveNext
+'
+'    Loop
     
-        If Not rsERP.EOF Then
-        rsERP.MoveFirst
-    End If
-
-    Do While Not rsERP.EOF
-        rsISS.AddNew
-
-        For idx = 0 To 3
-            rsISS.Fields(idx) = rsERP.Fields(idx)
-        Next idx
-
-        rsISS.Update
-        rsERP.MoveNext
-
-    Loop
-
-    rsERP.Close
-    rsISS.Close
+    conISS.Execute "INSERT INTO ProductLine VALUES('30', 'PCK', 'F', '1')"
+     conISS.Execute "INSERT INTO ProductLine VALUES('30', 'WAT', 'F', '1')"
+ 
+    
     Write_Log (": ProductLine Finished. . .")
 
     'ProductMaster
@@ -1407,6 +1611,7 @@ Public Sub SingleMaster()
 
     conISS.Execute "DELETE FROM ProductMaster WHERE Company = '30'"
 
+    'PCK
     Set rsISS = New ADODB.Recordset
     strSQL = "SELECT * FROM ProductMaster "
     rsISS.Open strSQL, conISS, adOpenDynamic, adLockOptimistic
@@ -1416,26 +1621,34 @@ Public Sub SingleMaster()
     mCmd.ActiveConnection = conERP1
 
     ' For single selling unit
-    mCmd.CommandText = "SELECT '30', 'PCK'+RTRIM(stkcod), stkdes, stkgrp, '', tab2.typdes, '', '', '', 1, 0, 0, 0, sellpr1, 0, 0, 0, ISINFO.vatrat, tab1.shortnam2 AS ProductGroup, tab1.shortnam2 AS ProductLine, '', 1 " _
-                                                    + " FROM " + strERPPath + "\STMAS, " + strERPPath + "\ISTAB tab1, " + strERPPath + "\ISTAB tab2, " + strERPPath + "\ISINFO " _
+    mCmd.CommandText = "SELECT '30', 'PCK'+RTRIM(stkcod), stkdes, stkgrp, '', tab2.typdes, tab3.typdes, tab4.typdes, '', 1, 0, 0, 0, sellpr1, 0, 0, 0, ISINFO.vatrat, tab1.shortnam2 AS ProductGroup, 'PCK', '', 1 " _
+                                                    + " FROM " + strERPPath + "\STMAS, " + strERPPath + "\ISTAB tab1, " + strERPPath + "\ISTAB tab2, " + strERPPath + "\ISINFO, " + strERPPath + "\ISTAB tab3, " + strERPPath + "\ISTAB tab4 " _
                                                     + " WHERE tab1.tabtyp = '22' " _
                                                     + " AND tab1.typcod = stkgrp " _
                                                     + " AND tab2.tabtyp = '20' " _
-                                                    + " AND tab2.typcod = lsellqu " _
-                                                    + " AND lsellqu <> '' " _
+                                                    + " AND tab2.typcod = qucod " _
+                                                    + " AND tab3.tabtyp = '20' " _
+                                                    + " AND tab3.typcod = pqucod " _
+                                                    + " AND tab4.tabtyp = '20' " _
+                                                    + " AND tab4.typcod = cqucod " _
                                                     + " UNION " _
-                                                    + " SELECT '30', 'WAT'+RTRIM(stkcod), stkdes, stkgrp, '', tab2.typdes, '', '', '', 1, 0, 0, 0, sellpr1, 0, 0, 0, ISINFO.vatrat, tab1.shortnam2 AS ProductGroup, tab1.shortnam2 AS ProductLine, '', 1 " _
-                                                    + " FROM " + strERP1Path + "\STMAS, " + strERP1Path + "\ISTAB tab1, " + strERP1Path + "\ISTAB tab2, " + strERP1Path + "\ISINFO " _
+                                                    + " SELECT '30', 'PCK'+RTRIM(stkcod), stkdes, stkgrp, '', tab2.typdes, tab3.typdes, '', '', 1, 0, 0, 0, sellpr1, 0, 0, 0, ISINFO.vatrat, tab1.shortnam2 AS ProductGroup, 'PCK', '', 1 " _
+                                                    + " FROM " + strERPPath + "\STMAS, " + strERPPath + "\ISTAB tab1, " + strERPPath + "\ISTAB tab2, " + strERPPath + "\ISINFO, " + strERPPath + "\ISTAB tab3 " _
                                                     + " WHERE tab1.tabtyp = '22' " _
                                                     + " AND tab1.typcod = stkgrp " _
                                                     + " AND tab2.tabtyp = '20' " _
-                                                    + " AND tab2.typcod = lsellqu " _
-                                                    + " AND lsellqu <> '' "
+                                                    + " AND tab2.typcod = qucod " _
+                                                    + " AND tab3.tabtyp = '20' " _
+                                                    + " AND tab3.typcod = pqucod " _
+                                                    + " AND stkcod not in (SELECT stkcod FROM " + strERPPath + "\STMAS, " + strERPPath + "\ISTAB tab4 where tab4.tabtyp = '20' " _
+                                                    + " AND tab4.typcod = cqucod )"
 '                                                    + " AND stkcod not in (SELECT stkcod FROM " + strERPPath + "\STMAS ) "
-    
+
+        
 
     mCmd.CommandType = adCmdText
 
+          
     Set rsERP = mCmd.Execute
     rsERP.MoveFirst
 
@@ -1445,12 +1658,110 @@ Public Sub SingleMaster()
         For idx = 0 To 21
             rsISS.Fields(idx) = rsERP.Fields(idx)
         Next idx
+        
+        
+        
+        If (rsERP.Fields(6)) = (rsERP.Fields(5)) Then
+            rsISS.Fields(6) = " "
+        End If
 
+        If (rsERP.Fields(7)) = (rsERP.Fields(5)) Then
+            rsISS.Fields(7) = " "
+        End If
+
+        If (rsERP.Fields(7)) = (rsERP.Fields(6)) Then
+            rsISS.Fields(7) = " "
+        End If
+        
+        If (rsISS.Fields(6)) = " " Then
+        rsISS.Fields(6) = rsISS.Fields(7)
+        
+        rsISS.Fields(7) = " "
+        End If
+        
+        
         rsISS.Update
         rsERP.MoveNext
 
     Loop
 
+    rsERP.Close
+    
+    'WAT
+        Set rsISS = New ADODB.Recordset
+    strSQL = "SELECT * FROM ProductMaster "
+    rsISS.Open strSQL, conISS, adOpenDynamic, adLockOptimistic
+
+    Set rsERP = New ADODB.Recordset
+    Set mCmd = New ADODB.Command
+    mCmd.ActiveConnection = conERP1
+
+    ' For single selling unit
+     mCmd.CommandText = "SELECT '30', 'WAT'+RTRIM(stkcod), stkdes, stkgrp, '', tab2.typdes, tab3.typdes, tab4.typdes, '', 1, 0, 0, 0, sellpr1, 0, 0, 0, ISINFO.vatrat, tab1.shortnam2 AS ProductGroup, 'WAT', '', 1 " _
+                                                    + " FROM " + strERP1Path + "\STMAS, " + strERP1Path + "\ISTAB tab1, " + strERP1Path + "\ISTAB tab2, " + strERP1Path + "\ISINFO, " + strERP1Path + "\ISTAB tab3, " + strERP1Path + "\ISTAB tab4 " _
+                                                    + " WHERE tab1.tabtyp = '22' " _
+                                                    + " AND tab1.typcod = stkgrp " _
+                                                    + " AND tab2.tabtyp = '20' " _
+                                                    + " AND tab2.typcod = qucod " _
+                                                    + " AND tab3.tabtyp = '20' " _
+                                                    + " AND tab3.typcod = pqucod " _
+                                                    + " AND tab4.tabtyp = '20' " _
+                                                    + " AND tab4.typcod = cqucod " _
+                                                    + " UNION " _
+                                                    + " SELECT '30', 'WAT'+RTRIM(stkcod), stkdes, stkgrp, '', tab2.typdes, tab3.typdes, '', '', 1, 0, 0, 0, sellpr1, 0, 0, 0, ISINFO.vatrat, tab1.shortnam2 AS ProductGroup, 'WAT', '', 1 " _
+                                                    + " FROM " + strERP1Path + "\STMAS, " + strERP1Path + "\ISTAB tab1, " + strERP1Path + "\ISTAB tab2, " + strERP1Path + "\ISINFO, " + strERP1Path + "\ISTAB tab3 " _
+                                                    + " WHERE tab1.tabtyp = '22' " _
+                                                    + " AND tab1.typcod = stkgrp " _
+                                                    + " AND tab2.tabtyp = '20' " _
+                                                    + " AND tab2.typcod = qucod " _
+                                                    + " AND tab3.tabtyp = '20' " _
+                                                    + " AND tab3.typcod = pqucod " _
+                                                    + " AND stkcod not in (SELECT stkcod FROM " + strERP1Path + "\STMAS, " + strERP1Path + "\ISTAB tab4 where tab4.tabtyp = '20' " _
+                                                    + " AND tab4.typcod = cqucod )"
+'                                                    + " AND stkcod not in (SELECT stkcod FROM " + strERPPath + "\STMAS ) "
+
+        
+
+    mCmd.CommandType = adCmdText
+
+          
+    Set rsERP = mCmd.Execute
+    rsERP.MoveFirst
+
+    Do While Not rsERP.EOF
+        rsISS.AddNew
+
+        For idx = 0 To 21
+            rsISS.Fields(idx) = rsERP.Fields(idx)
+        Next idx
+        
+        
+        
+        If (rsERP.Fields(6)) = (rsERP.Fields(5)) Then
+            rsISS.Fields(6) = " "
+        End If
+
+        If (rsERP.Fields(7)) = (rsERP.Fields(5)) Then
+            rsISS.Fields(7) = " "
+        End If
+
+        If (rsERP.Fields(7)) = (rsERP.Fields(6)) Then
+            rsISS.Fields(7) = " "
+        End If
+        
+        If (rsISS.Fields(6)) = " " Then
+        rsISS.Fields(6) = rsISS.Fields(7)
+        
+        rsISS.Fields(7) = " "
+        End If
+
+        rsISS.Update
+        rsERP.MoveNext
+
+    Loop
+    
+    
+    
     rsERP.Close
     rsISS.Close
    
@@ -1473,8 +1784,10 @@ Public Sub SingleMaster()
     mCmd.ActiveConnection = conERP
     
     mCmd.CommandText = "SELECT '30', typcod, typdes, 1 " _
-                                                        + " FROM ISTAB " _
-                                                        + " WHERE tabtyp = '40' "
+                                                        + " FROM  " + strERPPath + "\ISTAB " _
+                                                        + " WHERE tabtyp = '40' " _
+                                                       
+                                                        
     mCmd.CommandType = adCmdText
     
     Set rsERP = mCmd.Execute
@@ -1515,8 +1828,9 @@ Public Sub SingleMaster()
     Set mCmd = New ADODB.Command
     mCmd.ActiveConnection = conERP
     
-    mCmd.CommandText = "SELECT '30', 'PCK'+RTRIM(slmcod), 'PCK'+addr03, slmnam, 'PCK', 'ALL', 'ALL', 1 " _
-                                                        + " FROM OESLM "
+    mCmd.CommandText = "SELECT '30', 'PCK'+RTRIM(slmcod), 'PCK'+RTRIM(slmtyp), slmnam, 'PCK', 'ALL', 'ALL', 1 " _
+                                                        + " FROM OESLM " _
+                                                        + " WHERE slmtyp <> '' "
     mCmd.CommandType = adCmdText
     
     Set rsERP = mCmd.Execute
@@ -1550,8 +1864,8 @@ Public Sub SingleMaster()
     Write_Log (": OrderStatusReport Start. . .")
     
     
-    'Back Date 3 months
-    Date1 = DateAdd("m", -3, Date)
+    'Back Date 12 months
+    Date1 = DateAdd("m", -12, Date)
     Date1 = DateAdd("yyyy", -543, Date1)
     
     
@@ -1667,6 +1981,16 @@ Public Sub SingleMaster()
     rsERP.Close
     conISS.Execute "UPDATE OrderStatusReport SET SalesmanCode = RTRIM(SalesmanCode) "
     
+    Write_Log (": OrderStatusReport Copy (Slmcode+.) for MgrCode. . .")
+
+    strSQL = "          INSERT INTO OrderStatusReport"
+    strSQL = strSQL & " SELECT Company ,RTRIM(SalesmanCode)+'.' , CustomerCode, PO, PODate, PORef, DocumentCategory, SO,"
+    strSQL = strSQL & "        SODate, DO, DODate, Bill, BillDate, DDPDate, CurrencyCode"
+    strSQL = strSQL & "   From OrderStatusReport"
+    strSQL = strSQL & "   Where Company ='30'"
+    strSQL = strSQL & "   and SalesmanCode <> '" & Mgrcode & "'"
+    conISS.Execute strSQL, intNoOfRow
+    
     Write_Log (": OrderStatusReport Finished. . .")
     
     'OrderStatusReportItem
@@ -1743,7 +2067,7 @@ Public Sub SingleMaster()
     Set mCmd = New ADODB.Command
     mCmd.ActiveConnection = conERP
 
-    mCmd.CommandText = "SELECT '30'AS Company, OESO.slmcod AS SalesmanCode, 'PCK'+OESO.cuscod AS CustomerCode, ARTRN.youref AS PO, " _
+    mCmd.CommandText = "SELECT '30'AS Company, OESO.slmcod AS SalesmanCode, 'WAT'+OESO.cuscod AS CustomerCode, ARTRN.youref AS PO, " _
                                                                         + " 'C' AS DocumentCategory, ARTRN.sonum AS SO, '' AS DO, seqnum AS SOItemNo, " _
                                                                         + " 'WAT'+RTRIM(stkcod) AS ProductCode, ordqty AS OrderQty, shortnam AS OrderUnit, " _
                                                                         + " trnval AS OrderAmount, cancelqty AS CancelQty, trnval AS ShipAmount, " _
@@ -1856,6 +2180,99 @@ Public Sub SingleMaster()
     Write_Log (": OrderStatusReportItem-Header Comment Finished. . .")
         
     conISS.Execute "UPDATE OrderStatusReportItem SET SalesmanCode = RTRIM(SalesmanCode) "
+    
+    Write_Log (": OrderStatusReportItem Copy (Slmcode+.) for MgrCode. . .")
+
+    strSQL = "         INSERT INTO OrderStatusReportItem"
+    strSQL = strSQL & "   SELECT Company, SalesmanCode+'.' ,CustomerCode,PO,DocumentCategory,"
+    strSQL = strSQL & "     SO,DO,SOItemNo,ProductCode,OrderQty,OrderUnit,OrderAmount,"
+    strSQL = strSQL & "     ShipQty , ShipAmount, LeftQty, LeftAmount, CancelRemark, CurrencyCode, productsetcode "
+    strSQL = strSQL & "   From OrderStatusReportItem"
+    strSQL = strSQL & "   Where Company ='30'"
+    strSQL = strSQL & "   and SalesmanCode <> '" & Mgrcode & "'"
+    conISS.Execute strSQL, intNoOfRow
+    
+    Write_Log (": Plant Start. . .")
+    
+    conISS.Execute "DELETE FROM Plant WHERE Company = '30'"
+                                           
+    Set rsISS = New ADODB.Recordset
+    rsISS.Open "SELECT * FROM Plant ", conISS, adOpenDynamic, adLockOptimistic
+
+    Set rsERP = New ADODB.Recordset
+    Set mCmd = New ADODB.Command
+    mCmd.ActiveConnection = conERP
+    
+    mCmd.CommandText = "SELECT '30'AS Company, typcod AS Plant, typdes AS PlantName, 'NOR', '1' " _
+                                                    + " FROM " + strERPPath + "\ISTAB " _
+                                                    + " WHERE tabtyp = '21'" _
+                                                    + " UNION " _
+                                                    + " SELECT '30'AS Company, typcod AS Plant, typdes AS PlantName, 'NOR', '1' " _
+                                                    + " FROM " + strERP1Path + "\ISTAB " _
+                                                    + " WHERE tabtyp = '21' "
+                                                    
+    mCmd.CommandType = adCmdText
+    
+    Set rsERP = mCmd.Execute
+    rsERP.MoveFirst
+    
+    Do While Not rsERP.EOF
+        rsISS.AddNew
+        
+        For idx = 0 To 4
+            rsISS.Fields(idx) = rsERP.Fields(idx)
+        Next idx
+        
+        rsISS.Update
+        rsERP.MoveNext
+            
+    Loop
+    
+    rsISS.Close
+    rsERP.Close
+    
+    Write_Log (": Plant Finish. . .")
+    
+    Write_Log (": LookUp Start. . .")
+    
+    conISS.Execute "DELETE FROM LookUp WHERE Company = '30' and LookupType = 'ModeDly' "
+                                           
+    Set rsISS = New ADODB.Recordset
+    rsISS.Open "SELECT * FROM LookUp ", conISS, adOpenDynamic, adLockOptimistic
+
+    Set rsERP = New ADODB.Recordset
+    Set mCmd = New ADODB.Command
+    mCmd.ActiveConnection = conERP
+    
+    mCmd.CommandText = "SELECT '30'AS Company, 'ModeDly', 'PCK'+TRIM(typcod) AS DlyCod, 'PCK-'+TRIM(typdes) AS DlyDes, '1' " _
+                                                    + " FROM " + strERPPath + "\ISTAB " _
+                                                    + " WHERE tabtyp = '41'" _
+                                                    + " UNION " _
+                                                    + " SELECT '30'AS Company, 'ModeDly', 'WAT'+TRIM(typcod) AS DlyCod, 'WAT-'+TRIM(typdes) AS DlyDes, '1'" _
+                                                    + " FROM " + strERP1Path + "\ISTAB " _
+                                                    + " WHERE tabtyp = '41' "
+                                                    
+    mCmd.CommandType = adCmdText
+    
+    Set rsERP = mCmd.Execute
+    rsERP.MoveFirst
+    
+    Do While Not rsERP.EOF
+        rsISS.AddNew
+        
+        For idx = 0 To 4
+            rsISS.Fields(idx) = rsERP.Fields(idx)
+        Next idx
+        
+        rsISS.Update
+        rsERP.MoveNext
+            
+    Loop
+    
+    rsISS.Close
+    rsERP.Close
+    
+    Write_Log (": LookUp Finish. . .")
     
     Write_Log (": SingleMaster Finished. . .")
     
