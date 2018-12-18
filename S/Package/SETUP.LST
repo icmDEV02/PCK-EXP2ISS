@@ -48,7 +48,7 @@ File11=@MSJINT35.DLL,$(WinSysPathSysFile),,,4/24/98 12:00:00 AM,123664,3.51.623.
 File12=@MSJTER35.DLL,$(WinSysPathSysFile),,,4/24/98 12:00:00 AM,24848,3.51.623.0
 File13=@MSJET35.DLL,$(WinSysPathSysFile),$(DLLSelfRegister),,4/24/98 12:00:00 AM,1045776,3.51.623.4
 File14=@DAO350.DLL,$(MSDAOPath),$(DLLSelfRegister),$(Shared),4/27/98 12:00:00 AM,570128,3.51.1608.0
-File15=@EXP2ISS.exe,$(AppPath),,$(Shared),10/2/18 10:17:12 AM,139264,1.0.0.0
+File15=@EXP2ISS.exe,$(AppPath),,$(Shared),12/17/18 6:26:51 PM,167936,1.0.0.0
 
 ; The following lines may be deleted in order to obtain extra 
 ; space for customizing this file on a full installation diskette.

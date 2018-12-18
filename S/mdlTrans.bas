@@ -165,8 +165,8 @@ Public Sub ARReport()
         mCmd.CommandText = " SELECT DISTINCT '30'AS Company, ARTRN.slmcod AS SalesmanCode, 'PCK'+ARTRN.cuscod AS CustomerCode, " _
                                                             + " ARTRN.docnum AS BillNo, DTOS(ARTRN.docdat) AS BillDate, ARRCPIT.rcpnum AS TaxInvNo, " _
                                                             + " DTOS(ARTRN.duedat) AS DueDate_Txt, " _
-                                                            + " ARTRN.remamt AS BalanceAmount, 'Not Due' AS BillStatus, BKTRN.chqnum AS PostDateCheque, " _
-                                                            + " DTOS(BKTRN.chqdat) AS PostDateChequeDate, BKTRN.amount AS PostDateChequeAmount, 'THB' " _
+                                                            + " ARTRN.remamt AS BalanceAmount, 'Not Due' AS BillStatus, '' AS PostDateCheque, " _
+                                                            + " '' AS PostDateChequeDate, '' AS PostDateChequeAmount, 'THB' " _
                                                             + " From " + strERPPath + "\ARTRN LEFT OUTER JOIN " + strERPPath + "\ARRCPIT ON ARTRN.docnum = ARRCPIT.docnum " _
                                                                          + " LEFT OUTER JOIN " + strERPPath + "\BKTRN ON BKTRN.voucher = ARRCPIT.rcpnum " _
                                                             + " WHERE ARTRN.slmcod <> ' ' " _
@@ -176,8 +176,8 @@ Public Sub ARReport()
                                                             + " SELECT DISTINCT '30'AS Company, ARTRN.slmcod AS SalesmanCode, 'PCK'+ARTRN.cuscod AS CustomerCode, " _
                                                         + " ARTRN.docnum AS BillNo, DTOS(ARTRN.docdat) AS BillDate, ARRCPIT.rcpnum AS TaxInvNo, " _
                                                         + " DTOS(ARTRN.duedat) AS DueDate_Txt, " _
-                                                        + " ARTRN.remamt AS BalanceAmount, 'Not Due' AS BillStatus, BKTRN.chqnum AS PostDateCheque, " _
-                                                        + " DTOS(BKTRN.chqdat) AS PostDateChequeDate, BKTRN.amount AS PostDateChequeAmount, 'THB' " _
+                                                        + " ARTRN.remamt AS BalanceAmount, 'Not Due' AS BillStatus, '' AS PostDateCheque, " _
+                                                        + " '' AS PostDateChequeDate, '' AS PostDateChequeAmount, 'THB' " _
                                                         + " From " + strERP1Path + "\ARTRN LEFT OUTER JOIN " + strERP1Path + "\ARRCPIT ON ARTRN.docnum = ARRCPIT.docnum " _
                                                                      + " LEFT OUTER JOIN " + strERP1Path + "\BKTRN ON BKTRN.voucher = ARRCPIT.rcpnum " _
                                                         + " WHERE ARTRN.slmcod <> ' ' " _
@@ -490,6 +490,59 @@ Public Sub Customer()
     rsISS.Close
     rsERP.Close
     
+    conISS.Execute "UPDATE c " _
+                            + " SET c.CreditLimitUsed = a.sumA " _
+                            + " FROM Customer As c " _
+                            + " INNER JOIN " _
+                            + " (Select CustomerCode, SUM(BalanceAmount) sumA FROM ARReport WHERE company = '30' AND SalesmanCode not like '%.' GROUP BY CustomerCode) a" _
+                            + " ON a.CustomerCode = c.CustomerCode" _
+                            + " WHERE Company = '30'"
+                            
+    'UPDATE credit used,credit outstanding
+     Write_Log (": UPDATE Customer.credit_used,credit_outstanding Start. . .")
+
+    Set rsISS = New ADODB.Recordset
+    Set mCmd = New ADODB.Command
+    mCmd.ActiveConnection = conISS
+
+    strSQL = "          SELECT Company, customercode, sum(BalanceAmount )"
+    strSQL = strSQL & " From ARReport"
+    strSQL = strSQL & " Where Company ='30'"
+    strSQL = strSQL & " and balanceamount <> 0"
+    strSQL = strSQL & " and SalesmanCode not like '%.'"
+    strSQL = strSQL & " Group by Company, CustomerCode"
+
+    mCmd.CommandText = strSQL
+    mCmd.CommandType = adCmdText
+
+    Set rsISS = mCmd.Execute
+
+    If Not rsISS.EOF Then
+        rsISS.MoveFirst
+    End If
+
+    Do While Not rsISS.EOF
+
+        conISS.Execute " UPDATE Customer " _
+                   + "    SET CreditLimitUsed = " & rsISS.Fields(2) & " " _
+                   + "  WHERE Company = '" & rsISS.Fields(0) & "'" _
+                   + "   AND CustomerCode = '" & rsISS.Fields(1) & "'"
+
+        rsISS.MoveNext
+
+    Loop
+
+    rsISS.Close
+    Set rsISS = Nothing
+
+    conISS.Execute " UPDATE Customer " _
+                + "    SET CreditLimitOutstanding = CreditLimit - CreditLimitUsed  " _
+                + "  WHERE Company = '30'"
+
+    Write_Log (": UPDATE Customer.credit_used,credit_outstanding Finished. . .")
+
+
+                                        
     conISS.Execute "UPDATE Customer SET ProvinceCode = 'UAS' WHERE ProvinceCode = '' OR ProvinceCode IS NULL "
     
     Write_Log (": Customer Ship To Finished. . .")
